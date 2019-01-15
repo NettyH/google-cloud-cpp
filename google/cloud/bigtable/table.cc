@@ -97,6 +97,21 @@ bool Table::CheckAndMutateRow(std::string row_key, Filter filter,
   return value;
 }
 
+future<void> Table::AsyncApply(SingleRowMutation&& mutation,
+                               CompletionQueue& cq) {
+  promise<void> p;
+  impl_.AsyncApply(
+      cq,
+      [&p](CompletionQueue& cq, google::bigtable::v2::MutateRowResponse& r,
+           grpc::Status const& status) { p.set_value(); },
+      std::move(mutation));
+
+  auto result = p.get_future();
+  result.get();
+
+  return result;
+}
+
 }  // namespace BIGTABLE_CLIENT_NS
 }  // namespace bigtable
 }  // namespace cloud

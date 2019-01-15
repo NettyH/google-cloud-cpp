@@ -391,6 +391,50 @@ TEST_F(DataAsyncIntegrationTest, TableAsyncReadRowForNoRow) {
   EXPECT_FALSE(response.first);
   EXPECT_EQ(0, response.second.cells().size());
 }
+
+TEST_F(DataAsyncIntegrationTest, TableAsyncApply) {
+  std::string const table_id = RandomTableId();
+  auto sync_table = CreateTable(table_id, table_config);
+
+  std::string const row_key = "row-key-1";
+  std::vector<bigtable::Cell> created{
+      {row_key, family, "c0", 1000, "v1000", {}},
+      {row_key, family, "c1", 2000, "v2000", {}},
+      {row_key, family, "c3", 2000, "v3000", {}}};
+
+  SingleRowMutation mut(row_key);
+  for (auto const& c : created) {
+    mut.emplace_back(SetCell(
+        c.family_name(), c.column_qualifier(),
+        std::chrono::duration_cast<std::chrono::milliseconds>(c.timestamp()),
+        c.value()));
+  }
+
+  CompletionQueue cq;
+  std::thread pool([&cq] { cq.Run(); });
+
+  bigtable::BIGTABLE_CLIENT_NS::Table table(data_client_, table_id);
+
+  future<void> f = table.AsyncApply(std::move(mut), cq);
+
+  // Block until the asynchronous operation completes. This is not what one
+  // would do in a real application (the synchronous API is better in that
+  // case), but we need to wait before checking the results.
+
+  // Validate that the newly created cells are actually in the server.
+  std::vector<bigtable::Cell> expected{
+      {row_key, family, "c0", 1000, "v1000", {}},
+      {row_key, family, "c1", 2000, "v2000", {}},
+      {row_key, family, "c3", 2000, "v3000", {}}};
+
+  auto actual = ReadRows(*sync_table, bigtable::Filter::PassAllFilter());
+
+  // Cleanup the thread running the completion queue event loop.
+  cq.Shutdown();
+  pool.join();
+  DeleteTable(table_id);
+  CheckEqualUnordered(expected, actual);
+}
 }  // namespace
 }  // namespace BIGTABLE_CLIENT_NS
 }  // namespace bigtable

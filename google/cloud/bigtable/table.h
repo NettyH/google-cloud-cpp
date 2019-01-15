@@ -17,6 +17,8 @@
 
 #include "google/cloud/bigtable/internal/grpc_error_delegate.h"
 #include "google/cloud/bigtable/internal/table.h"
+#include "google/cloud/future.h"
+#include <future>
 
 namespace google {
 namespace cloud {
@@ -201,6 +203,7 @@ class Table {
    */
   void Apply(SingleRowMutation&& mut);
 
+  future<void> AsyncApply(SingleRowMutation&& mutation, CompletionQueue& cq);
   /**
    * Attempts to apply mutations to multiple rows.
    *
