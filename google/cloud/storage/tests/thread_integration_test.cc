@@ -91,8 +91,9 @@ void CreateObjects(std::string const& bucket_name, ObjectNameList group,
   // Create our own client so no state is shared with the other threads.
   Client client;
   for (auto const& object_name : group) {
-    (void)client.InsertObject(bucket_name, object_name, contents,
-                              IfGenerationMatch(0));
+    StatusOr<ObjectMetadata> meta = client.InsertObject(
+        bucket_name, object_name, contents, IfGenerationMatch(0));
+    ASSERT_TRUE(meta.ok()) << "status=" << meta.status();
   }
 }
 
@@ -110,7 +111,7 @@ TEST_F(ThreadIntegrationTest, Unshared) {
   std::string bucket_name = MakeRandomBucketName();
   Client client;
 
-  auto bucket = client.CreateBucketForProject(
+  StatusOr<BucketMetadata> meta = client.CreateBucketForProject(
       bucket_name, project_id,
       BucketMetadata()
           .set_storage_class(storage_class::Regional())
@@ -118,7 +119,8 @@ TEST_F(ThreadIntegrationTest, Unshared) {
           .disable_versioning(),
       PredefinedAcl("private"), PredefinedDefaultObjectAcl("projectPrivate"),
       Projection("full"));
-  EXPECT_EQ(bucket_name, bucket.name());
+  ASSERT_TRUE(meta.ok()) << "status=" << meta.status();
+  EXPECT_EQ(bucket_name, meta->name());
 
   constexpr int kObjectCount = 2000;
   std::vector<std::string> objects;
@@ -150,10 +152,10 @@ TEST_F(ThreadIntegrationTest, Unshared) {
     t.get();
   }
 
-  client.DeleteBucket(bucket_name);
+  auto delete_status = client.DeleteBucket(bucket_name);
+  ASSERT_TRUE(delete_status.ok()) << "status=" << delete_status.status();
   // This is basically a smoke test, if the test does not crash it was
   // successful.
-  SUCCEED();
 }
 
 class CaptureSendHeaderBackend : public LogBackend {
@@ -184,7 +186,7 @@ TEST_F(ThreadIntegrationTest, ReuseConnections) {
   std::string bucket_name = MakeRandomBucketName();
 
   auto id = LogSink::Instance().AddBackend(log_backend);
-  auto bucket = client.CreateBucketForProject(
+  StatusOr<BucketMetadata> meta = client.CreateBucketForProject(
       bucket_name, project_id,
       BucketMetadata()
           .set_storage_class(storage_class::Regional())
@@ -192,7 +194,8 @@ TEST_F(ThreadIntegrationTest, ReuseConnections) {
           .disable_versioning(),
       PredefinedAcl("private"), PredefinedDefaultObjectAcl("projectPrivate"),
       Projection("full"));
-  EXPECT_EQ(bucket_name, bucket.name());
+  ASSERT_TRUE(meta.ok()) << "status=" << meta.status();
+  EXPECT_EQ(bucket_name, meta->name());
 
   constexpr int kObjectCount = 100;
   std::vector<std::string> objects;
@@ -204,8 +207,9 @@ TEST_F(ThreadIntegrationTest, ReuseConnections) {
   std::vector<std::chrono::steady_clock::duration> delete_elapsed;
   for (auto const& name : objects) {
     auto start = std::chrono::steady_clock::now();
-    (void)client.InsertObject(bucket_name, name, LoremIpsum(),
-                              IfGenerationMatch(0));
+    StatusOr<ObjectMetadata> meta = client.InsertObject(
+        bucket_name, name, LoremIpsum(), IfGenerationMatch(0));
+    ASSERT_TRUE(meta.ok()) << "status=" << meta.status();
     create_elapsed.emplace_back(std::chrono::steady_clock::now() - start);
   }
   for (auto const& name : objects) {
@@ -214,7 +218,8 @@ TEST_F(ThreadIntegrationTest, ReuseConnections) {
     delete_elapsed.emplace_back(std::chrono::steady_clock::now() - start);
   }
   LogSink::Instance().RemoveBackend(id);
-  client.DeleteBucket(bucket_name);
+  auto delete_status = client.DeleteBucket(bucket_name);
+  ASSERT_TRUE(delete_status.ok()) << "status=" << delete_status.status();
 
   std::set<std::string> connected;
   std::copy_if(

@@ -68,7 +68,7 @@ class StatusOr final {
    *     they are simply integers, usually HTTP status codes. We need to map to
    *     the well-defined set of status codes.
    */
-  StatusOr() : StatusOr(Status(500, "UNKNOWN")) {}
+  StatusOr() : StatusOr(Status(StatusCode::kUnknown, "default")) {}
 
   /**
    * Creates a new `StatusOr<T>` holding the error condition @p rhs.
@@ -83,7 +83,7 @@ class StatusOr final {
   // NOLINTNEXTLINE(google-explicit-constructor)
   StatusOr(Status rhs) : status_(std::move(rhs)) {
     if (status_.ok()) {
-      google::cloud::internal::RaiseInvalidArgument(__func__);
+      google::cloud::internal::ThrowInvalidArgument(__func__);
     }
   }
 
@@ -336,7 +336,7 @@ class StatusOr<void> final {
    *     they are simply integers, usually HTTP status codes. We need to map to
    *     the well-defined set of status codes.
    */
-  StatusOr() : StatusOr(Status(500, "UNKNOWN")) {}
+  StatusOr() : StatusOr(Status(StatusCode::kUnknown, "default")) {}
 
   /**
    * Creates a new `StatusOr<void>` holding the status @p rhs.
